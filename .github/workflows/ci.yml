@@ -1,0 +1,117 @@
+name: CI — Task Manager Microservices
+
+on:
+  push:
+    branches: [develop, staging, master]
+  pull_request:
+    branches: [develop, staging, master]
+
+jobs:
+  # ──────────────────────────────────────────────────────────
+  # JOB 1 — Valida cada microsserviço em paralelo (matrix)
+  # ──────────────────────────────────────────────────────────
+  validate-services:
+    name: Validate — ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [api-gateway, auth-service, task-service, user-service]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: ${{ matrix.service }}/package.json
+
+      - name: Install dependencies
+        run: npm install --prefer-offline
+        working-directory: ${{ matrix.service }}
+
+      - name: Syntax check (todos os arquivos .js)
+        run: find src -name "*.js" | xargs node --check
+        working-directory: ${{ matrix.service }}
+
+      - name: Security audit
+        run: npm audit --audit-level=high
+        working-directory: ${{ matrix.service }}
+        continue-on-error: true
+
+  # ──────────────────────────────────────────────────────────
+  # JOB 2 — Valida o docker-compose.yml
+  # ──────────────────────────────────────────────────────────
+  docker-compose-validate:
+    name: Validate Docker Compose
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Criar .env a partir dos secrets
+        run: |
+          cat > .env << EOF
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          JWT_EXPIRES_IN=7d
+          MONGO_URI=${{ secrets.MONGO_URI }}
+          API_GATEWAY_PORT=3000
+          AUTH_SERVICE_PORT=3001
+          TASK_SERVICE_PORT=3002
+          USER_SERVICE_PORT=3003
+          AUTH_SERVICE_URL=http://auth-service:3001
+          TASK_SERVICE_URL=http://task-service:3002
+          USER_SERVICE_URL=http://user-service:3003
+          GRAFANA_PASSWORD=${{ secrets.GRAFANA_PASSWORD }}
+          EOF
+
+      - name: Validate docker-compose.yml
+        run: docker compose config --quiet
+
+  # ──────────────────────────────────────────────────────────
+  # JOB 3 — Deploy em staging (apenas quando merge em staging)
+  # ──────────────────────────────────────────────────────────
+  deploy-staging:
+    name: Deploy → Staging
+    runs-on: ubuntu-latest
+    needs: [validate-services, docker-compose-validate]
+    if: github.ref == 'refs/heads/staging' && github.event_name == 'push'
+    environment:
+      name: staging
+      url: https://task-manager-staging.onrender.com
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy no Render (staging)
+        run: |
+          echo "🚀 Trigger de deploy para staging configurado."
+          echo "Configure RENDER_DEPLOY_HOOK_STAGING em Settings > Secrets"
+          echo "e substitua este step por: curl -X POST \${{ secrets.RENDER_DEPLOY_HOOK_STAGING }}"
+
+  # ──────────────────────────────────────────────────────────
+  # JOB 4 — Deploy em produção (apenas quando merge em master)
+  # ──────────────────────────────────────────────────────────
+  deploy-production:
+    name: Deploy → Production
+    runs-on: ubuntu-latest
+    needs: [validate-services, docker-compose-validate]
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    environment:
+      name: production
+      url: https://task-manager.onrender.com
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy no Render (production)
+        run: |
+          echo "🚀 Trigger de deploy para produção configurado."
+          echo "Configure RENDER_DEPLOY_HOOK_PROD em Settings > Secrets"
+          echo "e substitua este step por: curl -X POST \${{ secrets.RENDER_DEPLOY_HOOK_PROD }}"
