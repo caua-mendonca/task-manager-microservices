@@ -1,0 +1,41 @@
+# Ambiente
+.env
+.env.local
+.env.*.local
+
+# Dependências
+node_modules/
+**/node_modules/
+
+# Build
+dist/
+build/
+.cache/
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Sistema Operacional
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testes
+coverage/
+.nyc_output/
+
+# Docker
+.dockerignore
+
+# Temporários
+*.tmp
+*.temp

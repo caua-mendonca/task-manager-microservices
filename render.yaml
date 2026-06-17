@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: task-manager-gateway
+    env: node
+    buildCommand: cd api-gateway && npm install
+    startCommand: cd api-gateway && npm start
+    envVars:
+      - key: JWT_SECRET
+        sync: false
+      - key: MONGO_URI
+        sync: false
+      - key: AUTH_SERVICE_URL
+        sync: false
+      - key: TASK_SERVICE_URL
+        sync: false
+      - key: USER_SERVICE_URL
+        sync: false

@@ -1,0 +1,126 @@
+services:
+  # ─── Banco de Dados ───────────────────────────────
+  mongo:
+    image: mongo:7.0
+    container_name: mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - task_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping').ok", "--quiet"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  # ─── API Gateway ──────────────────────────────────
+  api-gateway:
+    build: ./api-gateway
+    container_name: api-gateway
+    ports:
+      - "3000:3000"
+    env_file: .env
+    depends_on:
+      auth-service:
+        condition: service_started
+      task-service:
+        condition: service_started
+      user-service:
+        condition: service_started
+    networks:
+      - task_network
+    restart: unless-stopped
+
+  # ─── Auth Service ─────────────────────────────────
+  auth-service:
+    build: ./auth-service
+    container_name: auth-service
+    ports:
+      - "3001:3001"
+    env_file: .env
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - task_network
+    restart: unless-stopped
+
+  # ─── Task Service ─────────────────────────────────
+  task-service:
+    build: ./task-service
+    container_name: task-service
+    ports:
+      - "3002:3002"
+    env_file: .env
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - task_network
+    restart: unless-stopped
+
+  # ─── User Service ─────────────────────────────────
+  user-service:
+    build: ./user-service
+    container_name: user-service
+    ports:
+      - "3003:3003"
+    env_file: .env
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - task_network
+    restart: unless-stopped
+
+  # ─── Prometheus ───────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - task_network
+    restart: unless-stopped
+
+  # ─── Grafana ──────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3004:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    networks:
+      - task_network
+    restart: unless-stopped
+
+  # ─── k6 Load Testing ──────────────────────────────
+  k6:
+    image: grafana/k6:latest
+    container_name: k6
+    volumes:
+      - ./load-testing/k6:/scripts
+    networks:
+      - task_network
+    profiles:
+      - testing
+
+volumes:
+  mongo_data:
+  grafana_data:
+
+networks:
+  task_network:
+    driver: bridge
